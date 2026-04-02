@@ -249,7 +249,11 @@ def compute_rebalance(
         return {}
 
     inv_vol = 1.0 / selected_vols
-    raw_weights = inv_vol / inv_vol.sum()
+    inv_vol_weights = inv_vol / inv_vol.sum()
+    equal_weights = pd.Series(1.0 / len(final_tickers), index=final_tickers)
+
+    # Blend: 70% inverse-vol, 30% equal-weight
+    raw_weights = 0.70 * inv_vol_weights + 0.30 * equal_weights
 
     # Cap individual position at 10%
     max_weight = 0.10
