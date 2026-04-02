@@ -64,3 +64,9 @@ timestamp	sharpe	sortino	calmar	cagr_pct	max_dd_pct	avg_positions	status	descrip
 2026-04-03T02:17:32.548990	1.2154	1.694	1.5054	22.32	-14.83	8.9	kept	exp61: bear=20% with 50-day MA threshold
 2026-04-03T02:18:09.540377	1.2135	1.6874	1.4292	22.11	-15.47	8.9	discarded	exp62: bear=10% (max DD worsened)
 2026-04-03T02:18:37.930925	1.208	1.6834	1.5078	22.13	-14.68	8.9	discarded	exp63: caution=65% (vs 75%)
+2026-04-03T02:19:41.391317	1.2426	1.8158	1.9544	22.44	-11.48	8.4	kept	exp64: short-term reversal screen (exclude top 10% 1m return)
+2026-04-03T02:20:13.851113	1.1661	1.7044	1.5794	20.7	-13.11	8.1	discarded	exp65: reversal screen top 15% (too restrictive)
+2026-04-03T02:20:47.217666	1.2446	1.7927	2.0772	22.65	-10.9	8.6	kept	exp66: reversal screen top 5% 1m return excluded
+2026-04-03T02:21:43.384462	1.2548	1.8319	2.0644	22.51	-10.9	8.5	kept	exp67: reversal screen top 7.5% 1m return excluded
+2026-04-03T02:22:26.650388	1.2481	1.8214	2.0565	22.43	-10.9	8.5	discarded	exp68: top 8% reversal screen
+2026-04-03T02:24:32.428748	1.2483	1.813	1.8904	22.43	-11.86	8.5	discarded	exp69: 2-week micro-momentum factor
