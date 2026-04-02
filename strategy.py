@@ -211,7 +211,7 @@ def compute_rebalance(
     # Short-term reversal screen: exclude stocks in top 10% of 1-month return
     # (the 1-month skip already handles this, but this further guards against chasing)
     ret_1m_raw = (closes.iloc[-1] - closes.iloc[-21]) / closes.iloc[-21]
-    short_term_top_decile = ret_1m_raw.quantile(0.90)
+    short_term_top_decile = ret_1m_raw.quantile(0.95)  # Only exclude extreme outliers (top 5%)
 
     # ── Select top stocks ────────────────────────────────────────────────
     # Filter: positive momentum AND outperforming Nifty AND accelerating momentum
