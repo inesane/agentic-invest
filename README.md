@@ -6,7 +6,7 @@
 ![experiment progress](progress.png)
 *Experiments run autonomously by Claude. Green dots are kept improvements; the step line shows the running best Sharpe.*
 
-_Inspired by [@greenfish8090/claude-investment-strategy](https://github.com/greenfish8090/claude-investment-strategy): instead of giving an AI agent a training loop to iterate on, give it a stock market and let it run. The agent modifies a strategy file, backtests it, checks if Sharpe improved, keeps or discards, and repeats. You wake up in the morning to a log of experiments and (hopefully) a better strategy. No tickers are hardcoded. No human intuition is encoded. Pure signal, pure iteration — for the Indian stock market._
+_Instead of giving an AI agent a training loop to iterate on, give it a stock market and let it run. The agent modifies a strategy file, backtests it, checks if Sharpe improved, keeps or discards, and repeats. You wake up in the morning to a log of experiments and (hopefully) a better strategy. No tickers are hardcoded. No human intuition is encoded. Pure signal, pure iteration — for the Indian stock market._
 
 The idea: point Claude at `program.md` and a clean backtesting harness, then step away. The agent edits only `strategy.py` — a single function that receives daily OHLCV bars for the Nifty 200 universe and returns target portfolio weights. Everything else (data fetching, order simulation, performance reporting) is fixed infrastructure the agent cannot touch.
 
