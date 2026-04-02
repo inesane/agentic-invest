@@ -252,8 +252,12 @@ def compute_rebalance(
     inv_vol_weights = inv_vol / inv_vol.sum()
     equal_weights = pd.Series(1.0 / len(final_tickers), index=final_tickers)
 
-    # Blend: 70% inverse-vol, 30% equal-weight
-    raw_weights = 0.70 * inv_vol_weights + 0.30 * equal_weights
+    # Score-based weights: use composite score to upweight top picks
+    score_weights_raw = scores.loc[final_tickers, "composite"].clip(lower=0)
+    score_weights = score_weights_raw / score_weights_raw.sum() if score_weights_raw.sum() > 0 else equal_weights
+
+    # Blend: 60% inverse-vol, 25% equal-weight, 15% score-weighted
+    raw_weights = 0.60 * inv_vol_weights + 0.25 * equal_weights + 0.15 * score_weights
 
     # Cap individual position at 10%
     max_weight = 0.10
