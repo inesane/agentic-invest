@@ -186,15 +186,17 @@ def compute_rebalance(
         scores[f"{col}_rank"] = scores[col].rank(pct=True)
 
     # Composite score: momentum-heavy, with relative strength
-    scores["composite"] = (
-        0.40 * scores["momentum_rank"]
-        + 0.25 * scores["inv_vol_rank"]
-        + 0.15 * scores["vol_confirm_rank"]
-        + 0.20 * scores["rs_nifty_rank"]
-    )
-
-    # Momentum acceleration: 3m return > 6m return (momentum is speeding up)
+    # Momentum acceleration as ranked factor
     scores["mom_accel"] = ret_3m - ret_6m
+    scores["mom_accel_rank"] = scores["mom_accel"].rank(pct=True)
+
+    scores["composite"] = (
+        0.35 * scores["momentum_rank"]
+        + 0.20 * scores["inv_vol_rank"]
+        + 0.10 * scores["vol_confirm_rank"]
+        + 0.20 * scores["rs_nifty_rank"]
+        + 0.15 * scores["mom_accel_rank"]
+    )
 
     # ── Select top stocks ────────────────────────────────────────────────
     # Filter: positive momentum AND outperforming Nifty AND accelerating momentum
