@@ -159,6 +159,21 @@ def compute_rebalance(
     high_52w = closes.iloc[-252:].max()
     price_to_52w_high = closes.iloc[-1] / high_52w.replace(0, np.nan)
 
+    # Return consistency: fraction of positive monthly returns in past 12 months
+    # 12 non-overlapping monthly return windows, each 21 days
+    monthly_rets = pd.DataFrame(index=tickers)
+    for i in range(12):
+        start_idx = -(252 - i * 21)
+        end_idx = -(252 - (i + 1) * 21) if i < 11 else -21
+        if end_idx == 0:
+            end_idx = None
+        if end_idx is not None:
+            month_ret = (closes.iloc[end_idx] - closes.iloc[start_idx]) / closes.iloc[start_idx].replace(0, np.nan)
+        else:
+            month_ret = (closes.iloc[-1] - closes.iloc[start_idx]) / closes.iloc[start_idx].replace(0, np.nan)
+        monthly_rets[f"m{i}"] = month_ret
+    consistency = (monthly_rets > 0).sum(axis=1) / 12.0
+
     # ── Score and rank ───────────────────────────────────────────────────
     scores = pd.DataFrame(index=tickers)
     scores["momentum"] = momentum
@@ -166,6 +181,7 @@ def compute_rebalance(
     scores["vol_confirm"] = volume_ratio.reindex(tickers, fill_value=1.0)
     scores["rs_nifty"] = rs_vs_nifty
     scores["near_52w_high"] = price_to_52w_high
+    scores["consistency"] = consistency
 
     # Drop tickers with NaN scores
     scores = scores.dropna()
@@ -183,12 +199,13 @@ def compute_rebalance(
     scores["mom_accel_rank"] = scores["mom_accel"].rank(pct=True)
 
     scores["composite"] = (
-        0.30 * scores["momentum_rank"]
-        + 0.18 * scores["inv_vol_rank"]
-        + 0.08 * scores["vol_confirm_rank"]
-        + 0.18 * scores["rs_nifty_rank"]
-        + 0.14 * scores["mom_accel_rank"]
-        + 0.12 * scores["near_52w_high_rank"]
+        0.28 * scores["momentum_rank"]
+        + 0.15 * scores["inv_vol_rank"]
+        + 0.07 * scores["vol_confirm_rank"]
+        + 0.17 * scores["rs_nifty_rank"]
+        + 0.13 * scores["mom_accel_rank"]
+        + 0.10 * scores["near_52w_high_rank"]
+        + 0.10 * scores["consistency_rank"]
     )
 
     # ── Select top stocks ────────────────────────────────────────────────
