@@ -256,8 +256,8 @@ def compute_rebalance(
     score_weights_raw = scores.loc[final_tickers, "composite"].clip(lower=0)
     score_weights = score_weights_raw / score_weights_raw.sum() if score_weights_raw.sum() > 0 else equal_weights
 
-    # Blend: 60% inverse-vol, 20% equal-weight, 20% score-weighted
-    raw_weights = 0.60 * inv_vol_weights + 0.20 * equal_weights + 0.20 * score_weights
+    # Blend: 60% inverse-vol, 15% equal-weight, 25% score-weighted
+    raw_weights = 0.60 * inv_vol_weights + 0.15 * equal_weights + 0.25 * score_weights
 
     # Cap individual position at 10%
     max_weight = 0.10
