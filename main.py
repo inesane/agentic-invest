@@ -398,6 +398,7 @@ def run_backtest(
         "metrics": metrics,
         "benchmark_metrics": bench_metrics,
         "benchmark_equity": nifty50_close,
+        "benchmarks_raw": benchmarks,
         "broker": broker,
     }
 

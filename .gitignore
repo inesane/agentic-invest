@@ -8,5 +8,5 @@ data/*.csv
 dist/
 build/
 .env
-*.png
+# *.png  # Charts are committed to repo for README
 research/

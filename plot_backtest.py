@@ -2,9 +2,8 @@
 Visualization for backtest results.
 
 Generates:
-1. Equity curve comparison (strategy vs Nifty 50)
-2. Drawdown chart
-3. Rolling Sharpe ratio
+1. backtest_equity.png  — equity curve vs benchmarks with shaded max-drawdown regions
+2. progress.png         — experiment progress scatter (Sharpe over time)
 """
 
 import sys
@@ -14,99 +13,176 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import matplotlib.dates as mdates
 from pathlib import Path
 
 from data_fetcher import load_all_data
-from main import run_backtest, BACKTEST_START, BACKTEST_END, DATA_FETCH_START, INITIAL_CAPITAL
+from main import run_backtest, BACKTEST_START, BACKTEST_END, DATA_FETCH_START, INITIAL_CAPITAL, compute_metrics
 
 OUTPUT_DIR = Path(__file__).parent
 
 
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _max_drawdown_window(equity: pd.Series) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Return (start, end) dates of the maximum drawdown period."""
+    cummax = equity.cummax()
+    drawdown = (equity - cummax) / cummax
+    trough_idx = drawdown.idxmin()
+    peak_idx = cummax.loc[:trough_idx].idxmax()
+    return peak_idx, trough_idx
+
+
+def _drawdown_series(equity: pd.Series) -> pd.Series:
+    cummax = equity.cummax()
+    return (equity - cummax) / cummax * 100
+
+
+# ── Equity Curve Plot ─────────────────────────────────────────────────────────
+
 def plot_results(results: dict, save: bool = True):
-    """Generate all plots from backtest results."""
+    """
+    Generate equity curve comparison chart.
+    Mirrors the style of greenfish8090/claude-investment-strategy:
+    - Single equity panel with three curves
+    - Shaded region shows each curve's maximum drawdown window
+    - Subtitle with key metrics per curve
+    """
     equity = results["equity_curve"]
     metrics = results["metrics"]
     bench_metrics = results["benchmark_metrics"]
-    nifty50_close = results.get("benchmark_equity")
+    nifty50_raw = results.get("benchmark_equity")
+    benchmarks_dict = results.get("benchmarks_raw", {})
 
-    fig, axes = plt.subplots(3, 1, figsize=(14, 12), gridspec_kw={"height_ratios": [3, 1, 1]})
+    # Align all series to backtest window
+    start, end = equity.index[0], equity.index[-1]
+
+    # Build curves dict: name -> (series_normalized, color, linestyle, metrics_dict)
+    COLORS = {
+        "Strategy": "#2563eb",
+        "Nifty 50": "#6b7280",
+        "Nifty 500": "#d97706",
+    }
+
+    curves = {}
+
+    # Strategy
+    strat_norm = equity / equity.iloc[0] * 100
+    curves["Strategy"] = (strat_norm, metrics)
+
+    # Nifty 50
+    if nifty50_raw is not None:
+        n50 = nifty50_raw.loc[(nifty50_raw.index >= start) & (nifty50_raw.index <= end)].dropna()
+        if len(n50) > 20:
+            n50_norm = n50 / n50.iloc[0] * 100
+            n50_metrics = compute_metrics(n50 / n50.iloc[0] * INITIAL_CAPITAL)
+            curves["Nifty 50"] = (n50_norm, n50_metrics)
+
+    # Nifty 500
+    if "NIFTY500" in benchmarks_dict:
+        n500_raw = benchmarks_dict["NIFTY500"]
+        col = "Adj Close" if "Adj Close" in n500_raw.columns else "Close"
+        n500_s = n500_raw[col]
+        if isinstance(n500_s, pd.DataFrame):
+            n500_s = n500_s.iloc[:, 0]
+        n500 = n500_s.loc[(n500_s.index >= start) & (n500_s.index <= end)].dropna()
+        if len(n500) > 20:
+            n500_norm = n500 / n500.iloc[0] * 100
+            n500_metrics = compute_metrics(n500 / n500.iloc[0] * INITIAL_CAPITAL)
+            curves["Nifty 500"] = (n500_norm, n500_metrics)
+
+    # ── Figure layout ─────────────────────────────────────────────────────
+    fig = plt.figure(figsize=(14, 9))
+    gs = fig.add_gridspec(4, 1, hspace=0.08)
+    ax_eq = fig.add_subplot(gs[:3, 0])   # equity (3/4 height)
+    ax_dd = fig.add_subplot(gs[3, 0], sharex=ax_eq)  # drawdown (1/4)
+
+    # ── Subtitle string ───────────────────────────────────────────────────
+    subtitle_parts = []
+    for name, (series, m) in curves.items():
+        sharpe = m.get("sharpe", "—")
+        cagr = m.get("cagr_pct", "—")
+        maxdd = m.get("max_drawdown_pct", "—")
+        subtitle_parts.append(f"{name}: Sharpe {sharpe}, CAGR {cagr}%, Max DD {maxdd}%")
+    subtitle = "   |   ".join(subtitle_parts)
+
     fig.suptitle(
-        "Indian Stock Market Strategy — Backtest Results",
-        fontsize=16,
+        "Backtest: Indian Stock Market Strategy vs Benchmarks, 2016–2026",
+        fontsize=14,
         fontweight="bold",
         y=0.98,
     )
+    ax_eq.set_title(subtitle, fontsize=8.5, color="#555", pad=6)
 
-    # ── 1. Equity Curve ──────────────────────────────────────────────────
-    ax1 = axes[0]
+    # ── Plot curves + shade max drawdown windows ──────────────────────────
+    ls_map = {"Strategy": "-", "Nifty 50": "--", "Nifty 500": ":"}
+    lw_map = {"Strategy": 2.0, "Nifty 50": 1.3, "Nifty 500": 1.3}
 
-    # Normalize both to start at same value
-    strat_norm = equity / equity.iloc[0] * 100
-    ax1.plot(strat_norm.index, strat_norm.values, label="Strategy", color="#2563eb", linewidth=1.5)
+    for name, (series, m) in curves.items():
+        color = COLORS.get(name, "#888")
+        ls = ls_map.get(name, "-")
+        lw = lw_map.get(name, 1.5)
 
-    if nifty50_close is not None:
-        bench_period = nifty50_close.loc[
-            (nifty50_close.index >= equity.index[0])
-            & (nifty50_close.index <= equity.index[-1])
-        ]
-        if len(bench_period) > 0:
-            bench_norm = bench_period / bench_period.iloc[0] * 100
-            ax1.plot(bench_norm.index, bench_norm.values, label="Nifty 50", color="#9ca3af", linewidth=1.2, linestyle="--")
+        ax_eq.plot(series.index, series.values, label=name, color=color,
+                   linewidth=lw, linestyle=ls, zorder=3)
 
-    ax1.set_ylabel("Value (₹100 start)", fontsize=11)
-    ax1.set_yscale("log")
-    ax1.yaxis.set_major_formatter(mticker.ScalarFormatter())
-    ax1.legend(loc="upper left", fontsize=10)
-    ax1.grid(True, alpha=0.3)
-    ax1.set_title(
-        f"Sharpe: {metrics.get('sharpe', 'N/A')} | "
-        f"CAGR: {metrics.get('cagr_pct', 'N/A')}% | "
-        f"Max DD: {metrics.get('max_drawdown_pct', 'N/A')}% | "
-        f"Nifty Sharpe: {bench_metrics.get('sharpe', 'N/A')}",
-        fontsize=10,
-        color="#666",
-    )
+        # Shade max drawdown window
+        try:
+            peak_dt, trough_dt = _max_drawdown_window(series)
+            ax_eq.axvspan(peak_dt, trough_dt, alpha=0.10, color=color, zorder=1)
+        except Exception:
+            pass
 
-    # ── 2. Drawdown Chart ────────────────────────────────────────────────
-    ax2 = axes[1]
-    cummax = equity.cummax()
-    drawdown = (equity - cummax) / cummax * 100
-    ax2.fill_between(drawdown.index, drawdown.values, 0, color="#ef4444", alpha=0.4)
-    ax2.plot(drawdown.index, drawdown.values, color="#ef4444", linewidth=0.8)
-    ax2.set_ylabel("Drawdown %", fontsize=11)
-    ax2.set_ylim(drawdown.min() * 1.1, 2)
-    ax2.grid(True, alpha=0.3)
+    ax_eq.set_ylabel("Value (₹100 start)", fontsize=11)
+    ax_eq.set_yscale("log")
+    ax_eq.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"₹{x:,.0f}"))
+    ax_eq.legend(loc="upper left", fontsize=10, framealpha=0.9)
+    ax_eq.grid(True, alpha=0.25, zorder=0)
+    ax_eq.tick_params(labelbottom=False)
 
-    # ── 3. Rolling 6-month Sharpe ────────────────────────────────────────
-    ax3 = axes[2]
-    returns = equity.pct_change().dropna()
-    rolling_sharpe = (
-        returns.rolling(126).mean() / returns.rolling(126).std()
-    ) * np.sqrt(252)
-    ax3.plot(rolling_sharpe.index, rolling_sharpe.values, color="#8b5cf6", linewidth=0.8)
-    ax3.axhline(y=0, color="#666", linewidth=0.5, linestyle="--")
-    ax3.axhline(y=1, color="#22c55e", linewidth=0.5, linestyle="--", alpha=0.5)
-    ax3.set_ylabel("Rolling Sharpe (6m)", fontsize=11)
-    ax3.set_xlabel("Date", fontsize=11)
-    ax3.grid(True, alpha=0.3)
+    # ── Drawdown panel ────────────────────────────────────────────────────
+    strat_dd = _drawdown_series(strat_norm)
+    ax_dd.fill_between(strat_dd.index, strat_dd.values, 0,
+                       color=COLORS["Strategy"], alpha=0.35, zorder=2)
+    ax_dd.plot(strat_dd.index, strat_dd.values,
+               color=COLORS["Strategy"], linewidth=0.8, zorder=3)
 
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    if "Nifty 50" in curves:
+        n50_dd = _drawdown_series(curves["Nifty 50"][0])
+        ax_dd.plot(n50_dd.index, n50_dd.values,
+                   color=COLORS["Nifty 50"], linewidth=0.8, linestyle="--",
+                   alpha=0.7, zorder=2)
+
+    ax_dd.set_ylabel("Drawdown", fontsize=10)
+    ax_dd.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:.0f}%"))
+    ax_dd.set_ylim(min(strat_dd.min() * 1.15, -5), 2)
+    ax_dd.grid(True, alpha=0.25)
+    ax_dd.xaxis.set_major_formatter(mdates.DateFormatter("%Y"))
+    ax_dd.xaxis.set_major_locator(mdates.YearLocator())
+    ax_dd.tick_params(axis="x", labelsize=9)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
 
     if save:
         path = OUTPUT_DIR / "backtest_equity.png"
         plt.savefig(path, dpi=150, bbox_inches="tight")
-        print(f"Saved equity curve to {path}")
+        print(f"Saved to {path}")
     else:
         plt.show()
-
     plt.close()
 
 
-def plot_progress(results_file: str = "results.tsv"):
-    """Plot experiment progress from results.tsv."""
-    path = Path(results_file)
+# ── Progress Plot ─────────────────────────────────────────────────────────────
+
+def plot_progress(results_file: str | None = None, save: bool = True):
+    """
+    Scatter plot of Sharpe ratio over experiments — mirrors progress.png
+    from the original repo.
+    Gray dots = discarded, green dots = kept, blue step line = running best.
+    """
+    path = Path(results_file) if results_file else OUTPUT_DIR / "results.tsv"
     if not path.exists():
-        print(f"No results file found at {path}")
+        print(f"No results file at {path}")
         return
 
     df = pd.read_csv(path, sep="\t")
@@ -114,58 +190,100 @@ def plot_progress(results_file: str = "results.tsv"):
         print("No results to plot")
         return
 
-    fig, axes = plt.subplots(2, 1, figsize=(14, 8))
-    fig.suptitle("Experiment Progress", fontsize=14, fontweight="bold")
+    # Deduplicate exact same timestamps (re-runs of same experiment)
+    df = df.drop_duplicates(subset=["timestamp", "sharpe", "description"])
+    df = df.reset_index(drop=True)
+    df["exp_num"] = range(len(df))
 
-    # Sharpe over time
-    ax1 = axes[0]
     kept = df[df["status"] == "kept"]
     discarded = df[df["status"] == "discarded"]
 
-    ax1.scatter(range(len(discarded)), discarded["sharpe"], color="#ef4444", alpha=0.4, s=15, label="Discarded")
-    ax1.scatter(range(len(kept)), kept["sharpe"], color="#22c55e", alpha=0.8, s=25, label="Kept")
+    n_total = len(df)
+    n_kept = len(kept)
+    best_sharpe = kept["sharpe"].max() if len(kept) > 0 else 0
 
-    # Running best
+    fig, axes = plt.subplots(2, 1, figsize=(14, 9),
+                             gridspec_kw={"height_ratios": [2, 1]})
+    fig.suptitle(
+        f"Strategy Research Progress: {n_total} Experiments, {n_kept} Kept Improvements",
+        fontsize=14,
+        fontweight="bold",
+    )
+
+    # ── Top panel: Sharpe scatter ─────────────────────────────────────────
+    ax1 = axes[0]
+
+    if len(discarded) > 0:
+        ax1.scatter(discarded["exp_num"], discarded["sharpe"],
+                    color="#9ca3af", alpha=0.5, s=20, zorder=2, label="Discarded")
     if len(kept) > 0:
+        ax1.scatter(kept["exp_num"], kept["sharpe"],
+                    color="#22c55e", alpha=0.9, s=40, zorder=3, label="Kept")
+        # Running best as step line
         running_best = kept["sharpe"].cummax()
-        ax1.plot(range(len(kept)), running_best, color="#2563eb", linewidth=1.5, label="Best Sharpe")
+        ax1.step(kept["exp_num"], running_best,
+                 color="#2563eb", linewidth=2, where="post",
+                 zorder=4, label=f"Best Sharpe ({best_sharpe:.4f})")
 
-    ax1.set_ylabel("Sharpe Ratio")
-    ax1.legend()
-    ax1.grid(True, alpha=0.3)
+    ax1.set_ylabel("Sharpe Ratio", fontsize=11)
+    ax1.legend(loc="upper left", fontsize=10)
+    ax1.grid(True, alpha=0.25)
+    ax1.tick_params(labelbottom=False)
 
-    # CAGR over time
+    # ── Bottom panel: CAGR + Max DD bars ─────────────────────────────────
     ax2 = axes[1]
-    ax2.scatter(range(len(discarded)), discarded["cagr_pct"], color="#ef4444", alpha=0.4, s=15, label="Discarded")
-    ax2.scatter(range(len(kept)), kept["cagr_pct"], color="#22c55e", alpha=0.8, s=25, label="Kept")
-    ax2.set_ylabel("CAGR %")
-    ax2.set_xlabel("Experiment #")
-    ax2.legend()
-    ax2.grid(True, alpha=0.3)
 
-    plt.tight_layout()
-    path = OUTPUT_DIR / "progress.png"
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    print(f"Saved progress chart to {path}")
+    if len(kept) > 0:
+        bar_width = max(0.4, 8 / max(n_kept, 1))
+        ax2.bar(kept["exp_num"], kept["cagr_pct"],
+                color="#22c55e", alpha=0.8, width=bar_width, label="CAGR %", zorder=2)
+        ax2.bar(kept["exp_num"], kept["max_dd_pct"],
+                color="#ef4444", alpha=0.6, width=bar_width, label="Max DD %", zorder=2)
+    if len(discarded) > 0:
+        bar_width = max(0.3, 8 / max(n_total, 1))
+        ax2.bar(discarded["exp_num"], discarded["cagr_pct"],
+                color="#9ca3af", alpha=0.3, width=bar_width, zorder=1)
+
+    ax2.axhline(0, color="#666", linewidth=0.6, linestyle="--")
+    ax2.set_ylabel("CAGR % / Max DD %", fontsize=10)
+    ax2.set_xlabel("Experiment #", fontsize=11)
+    ax2.legend(loc="upper left", fontsize=9)
+    ax2.grid(True, alpha=0.25)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    if save:
+        out = OUTPUT_DIR / "progress.png"
+        plt.savefig(out, dpi=150, bbox_inches="tight")
+        print(f"Saved to {out}")
+    else:
+        plt.show()
     plt.close()
 
+
+# ── Main ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     if "--progress" in sys.argv:
         plot_progress()
+        sys.exit(0)
+
+    print("Loading data...")
+    data = load_all_data(start=DATA_FETCH_START, end=BACKTEST_END)
+
+    print("Running backtest...")
+    results = run_backtest(
+        close_prices=data["close_prices"],
+        volume=data["volume"],
+        benchmarks=data["benchmarks"],
+        sectors=data["sectors"],
+        verbose=not ("--quiet" in sys.argv),
+    )
+
+    if results:
+        # Attach raw benchmarks for Nifty 500
+        results["benchmarks_raw"] = data["benchmarks"]
+        plot_results(results)
+        plot_progress()
     else:
-        print("Loading data...")
-        data = load_all_data(start=DATA_FETCH_START, end=BACKTEST_END)
-
-        print("Running backtest...")
-        results = run_backtest(
-            close_prices=data["close_prices"],
-            volume=data["volume"],
-            benchmarks=data["benchmarks"],
-            sectors=data["sectors"],
-        )
-
-        if results:
-            plot_results(results)
-        else:
-            print("Backtest failed, nothing to plot.")
+        print("Backtest failed, nothing to plot.")
