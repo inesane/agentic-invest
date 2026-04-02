@@ -230,19 +230,24 @@ def plot_progress(results_file: str | None = None, save: bool = True):
     ax1.grid(True, alpha=0.25)
     ax1.tick_params(labelbottom=False)
 
-    # ── Bottom panel: CAGR + Max DD bars ─────────────────────────────────
+    # ── Bottom panel: CAGR + Max DD scatter ──────────────────────────────
     ax2 = axes[1]
 
-    if len(kept) > 0:
-        bar_width = max(0.4, 8 / max(n_kept, 1))
-        ax2.bar(kept["exp_num"], kept["cagr_pct"],
-                color="#22c55e", alpha=0.8, width=bar_width, label="CAGR %", zorder=2)
-        ax2.bar(kept["exp_num"], kept["max_dd_pct"],
-                color="#ef4444", alpha=0.6, width=bar_width, label="Max DD %", zorder=2)
     if len(discarded) > 0:
-        bar_width = max(0.3, 8 / max(n_total, 1))
-        ax2.bar(discarded["exp_num"], discarded["cagr_pct"],
-                color="#9ca3af", alpha=0.3, width=bar_width, zorder=1)
+        ax2.scatter(discarded["exp_num"], discarded["cagr_pct"],
+                    color="#9ca3af", alpha=0.3, s=18, zorder=1)
+        ax2.scatter(discarded["exp_num"], discarded["max_dd_pct"],
+                    color="#9ca3af", alpha=0.3, s=18, zorder=1)
+    if len(kept) > 0:
+        ax2.scatter(kept["exp_num"], kept["cagr_pct"],
+                    color="#22c55e", alpha=0.9, s=35, zorder=3, label="CAGR %")
+        ax2.scatter(kept["exp_num"], kept["max_dd_pct"],
+                    color="#ef4444", alpha=0.7, s=35, zorder=3, label="Max DD %")
+        # Connect kept points with lines
+        ax2.plot(kept["exp_num"], kept["cagr_pct"],
+                 color="#22c55e", alpha=0.4, linewidth=1, zorder=2)
+        ax2.plot(kept["exp_num"], kept["max_dd_pct"],
+                 color="#ef4444", alpha=0.4, linewidth=1, zorder=2)
 
     ax2.axhline(0, color="#666", linewidth=0.6, linestyle="--")
     ax2.set_ylabel("CAGR % / Max DD %", fontsize=10)
