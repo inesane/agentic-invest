@@ -250,33 +250,4 @@ def compute_rebalance(
     # Scale by total exposure limit and trend multiplier
     weights = (capped * max_total_exposure * trend_multiplier).to_dict()
 
-    # ── Trailing stop: exit positions that dropped 20% from peak ─────────
-    if "entry_prices" not in state:
-        state["entry_prices"] = {}
-    if "peak_prices" not in state:
-        state["peak_prices"] = {}
-
-    last_prices = closes.iloc[-1]
-    for ticker in list(weights.keys()):
-        price = last_prices.get(ticker)
-        if price is None or np.isnan(price):
-            continue
-
-        if ticker in state["peak_prices"]:
-            state["peak_prices"][ticker] = max(state["peak_prices"][ticker], price)
-            peak = state["peak_prices"][ticker]
-            if price < peak * 0.80:  # 20% trailing stop
-                weights.pop(ticker, None)
-                state["peak_prices"].pop(ticker, None)
-                state["entry_prices"].pop(ticker, None)
-                continue
-        else:
-            state["peak_prices"][ticker] = price
-            state["entry_prices"][ticker] = price
-
-    # Clean up state for exited positions
-    held_tickers = set(weights.keys())
-    for key in ["peak_prices", "entry_prices"]:
-        state[key] = {t: v for t, v in state[key].items() if t in held_tickers}
-
     return weights
