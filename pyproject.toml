@@ -1,0 +1,17 @@
+[project]
+name = "agentic-invest"
+version = "0.1.0"
+description = "Autonomous AI-driven investment strategy optimizer for the Indian stock market"
+requires-python = ">=3.10"
+dependencies = [
+    "yfinance>=0.2.36",
+    "matplotlib>=3.8",
+    "pandas>=2.1",
+    "numpy>=1.26",
+    "requests>=2.31",
+    "tqdm>=4.66",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
