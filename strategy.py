@@ -208,12 +208,19 @@ def compute_rebalance(
         + 0.10 * scores["consistency_rank"]
     )
 
+    # Short-term reversal screen: exclude stocks in top 10% of 1-month return
+    # (the 1-month skip already handles this, but this further guards against chasing)
+    ret_1m_raw = (closes.iloc[-1] - closes.iloc[-21]) / closes.iloc[-21]
+    short_term_top_decile = ret_1m_raw.quantile(0.90)
+
     # ── Select top stocks ────────────────────────────────────────────────
     # Filter: positive momentum AND outperforming Nifty AND accelerating momentum
+    # AND not in top 10% of recent 1-month return (short-term reversal protection)
     scores = scores[
         (scores["momentum"] > 0)
         & (scores["rs_nifty"] > 0)
         & (scores["mom_accel"] > 0)
+        & (ret_1m_raw.reindex(scores.index) <= short_term_top_decile)
     ]
 
     if len(scores) < 3:
