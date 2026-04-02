@@ -193,9 +193,16 @@ def compute_rebalance(
         + 0.20 * scores["rs_nifty_rank"]
     )
 
+    # Momentum acceleration: 3m return > 6m return (momentum is speeding up)
+    scores["mom_accel"] = ret_3m - ret_6m
+
     # ── Select top stocks ────────────────────────────────────────────────
-    # Filter: positive momentum AND outperforming Nifty over 6m
-    scores = scores[(scores["momentum"] > 0) & (scores["rs_nifty"] > 0)]
+    # Filter: positive momentum AND outperforming Nifty AND accelerating momentum
+    scores = scores[
+        (scores["momentum"] > 0)
+        & (scores["rs_nifty"] > 0)
+        & (scores["mom_accel"] > 0)
+    ]
 
     if len(scores) < 3:
         return {}
