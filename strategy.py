@@ -81,7 +81,7 @@ def compute_rebalance(
         nifty_ma50 = nifty50.rolling(50).mean().iloc[-1]
         nifty_current = nifty50.iloc[-1]
         if nifty_current < nifty_ma50:
-            trend_multiplier = 0.40
+            trend_multiplier = 0.30
             state["regime"] = "bear"
         elif nifty_current < nifty_ma200:
             trend_multiplier = 0.75
