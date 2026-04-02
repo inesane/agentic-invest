@@ -89,23 +89,9 @@ def compute_rebalance(
         else:
             state["regime"] = "bull"
 
-    # ── VIX-based position sizing ────────────────────────────────────────
-    if vix is not None:
-        if vix > 30:
-            max_positions = 5
-            max_total_exposure = 0.5
-        elif vix > 22:
-            max_positions = 10
-            max_total_exposure = 0.75
-        elif vix > 16:
-            max_positions = 15
-            max_total_exposure = 0.90
-        else:
-            max_positions = 20
-            max_total_exposure = 1.0
-    else:
-        max_positions = 15
-        max_total_exposure = 0.90
+    # Fixed position sizing — VIX gating removed (was cutting positions during recoveries)
+    max_positions = 20
+    max_total_exposure = 1.0
 
     # ── Filter universe ──────────────────────────────────────────────────
     # Only consider tickers with sufficient history
