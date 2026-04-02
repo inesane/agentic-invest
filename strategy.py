@@ -154,12 +154,18 @@ def compute_rebalance(
         nifty_ret_6m = (nifty50.iloc[-21] - nifty50.iloc[-126]) / nifty50.iloc[-126]
         rs_vs_nifty = ret_6m - nifty_ret_6m  # Positive = outperforming Nifty
 
+    # 52-week high proximity: ratio of current price to 52-week high
+    # Stocks near their 52-week high tend to continue outperforming (George & Hwang 2004)
+    high_52w = closes.iloc[-252:].max()
+    price_to_52w_high = closes.iloc[-1] / high_52w.replace(0, np.nan)
+
     # ── Score and rank ───────────────────────────────────────────────────
     scores = pd.DataFrame(index=tickers)
     scores["momentum"] = momentum
     scores["inv_vol"] = 1.0 / vol_60d.replace(0, np.nan)  # Lower vol = better
     scores["vol_confirm"] = volume_ratio.reindex(tickers, fill_value=1.0)
     scores["rs_nifty"] = rs_vs_nifty
+    scores["near_52w_high"] = price_to_52w_high
 
     # Drop tickers with NaN scores
     scores = scores.dropna()
@@ -177,11 +183,12 @@ def compute_rebalance(
     scores["mom_accel_rank"] = scores["mom_accel"].rank(pct=True)
 
     scores["composite"] = (
-        0.35 * scores["momentum_rank"]
-        + 0.20 * scores["inv_vol_rank"]
-        + 0.10 * scores["vol_confirm_rank"]
-        + 0.20 * scores["rs_nifty_rank"]
-        + 0.15 * scores["mom_accel_rank"]
+        0.30 * scores["momentum_rank"]
+        + 0.18 * scores["inv_vol_rank"]
+        + 0.08 * scores["vol_confirm_rank"]
+        + 0.18 * scores["rs_nifty_rank"]
+        + 0.14 * scores["mom_accel_rank"]
+        + 0.12 * scores["near_52w_high_rank"]
     )
 
     # ── Select top stocks ────────────────────────────────────────────────
