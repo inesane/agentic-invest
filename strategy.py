@@ -70,15 +70,24 @@ def compute_rebalance(
     if len(hist_close) < 252:  # Need at least 1 year of history
         return {}
 
-    # ── Trend filter: Nifty 50 must be above 200-day MA ──────────────────
+    # ── Trend filter: graded exposure based on Nifty vs MAs ─────────────
+    # Instead of binary cash/invested, grade exposure by trend strength.
+    # Nifty above 200-day MA: full exposure
+    # Nifty between 100-day and 200-day MA: 50% exposure
+    # Nifty below 100-day MA: 25% exposure (defensive, not cash)
+    trend_multiplier = 1.0
     if nifty50 is not None and len(nifty50) >= 200:
         nifty_ma200 = nifty50.rolling(200).mean().iloc[-1]
+        nifty_ma100 = nifty50.rolling(100).mean().iloc[-1]
         nifty_current = nifty50.iloc[-1]
-        if nifty_current < nifty_ma200:
-            # Bear market regime — go to cash
+        if nifty_current < nifty_ma100:
+            trend_multiplier = 0.25
             state["regime"] = "bear"
-            return {}
-        state["regime"] = "bull"
+        elif nifty_current < nifty_ma200:
+            trend_multiplier = 0.50
+            state["regime"] = "caution"
+        else:
+            state["regime"] = "bull"
 
     # ── VIX-based position sizing ────────────────────────────────────────
     if vix is not None:
@@ -229,8 +238,8 @@ def compute_rebalance(
     # Redistribute excess
     capped = capped / capped.sum()
 
-    # Scale by total exposure limit
-    weights = (capped * max_total_exposure).to_dict()
+    # Scale by total exposure limit and trend multiplier
+    weights = (capped * max_total_exposure * trend_multiplier).to_dict()
 
     # ── Trailing stop: exit positions that dropped 20% from peak ─────────
     if "entry_prices" not in state:
